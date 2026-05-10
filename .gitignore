@@ -1,0 +1,68 @@
+# Environment variables
+.env
+.env.local
+
+# Data directory (Videos, Audio, Clips)
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Next.js / Node
+node_modules/
+.pnp
+.pnp.js
+.next/
+out/
+build/
+.swc/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+.vercel
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary scripts
+check_jobs.py
+backend/check_jobs.py

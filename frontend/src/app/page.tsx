@@ -5,11 +5,10 @@ import { UrlInputPanel } from "@/components/UrlInputPanel";
 import { JobProgress } from "@/components/JobProgress";
 import { ClipCard } from "@/components/ClipCard";
 import { ExportPanel } from "@/components/ExportPanel";
-import { getClips } from "@/lib/api";
+import { ApiError, getClips } from "@/lib/api";
 import type { ClipsResponse } from "@/lib/types";
 import { Scissors, History, Settings, Sun, Moon } from "lucide-react";
 import { clsx } from "clsx";
-import { useJobSSE } from "@/hooks/useJobSSE";
 
 type NavTab = "new" | "history" | "settings";
 
@@ -146,13 +145,13 @@ export default function HomePage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [clipsResult, setClipsResult] = useState<ClipsResponse | null>(null);
-
-  const { isDone } = useJobSSE(jobId);
+  const [clipLoadError, setClipLoadError] = useState<string | null>(null);
 
   const handleJobSubmitted = useCallback((id: string) => {
     setJobId(id);
     setIsProcessing(true);
     setClipsResult(null);
+    setClipLoadError(null);
   }, []);
 
   const handleDone = useCallback(async () => {
@@ -160,9 +159,15 @@ export default function HomePage() {
     setIsProcessing(false);
     try {
       const result = await getClips(jobId);
+      setClipLoadError(null);
       setClipsResult(result);
-    } catch {
-      // Pipeline done but clips may be empty (Phase 1 stub)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 422) {
+        setClipLoadError(err.message);
+        setClipsResult(null);
+        return;
+      }
+      setClipLoadError(null);
       setClipsResult({
         job_id: jobId,
         total: 0,
@@ -171,11 +176,6 @@ export default function HomePage() {
       });
     }
   }, [jobId]);
-
-  // Trigger handleDone when SSE reports done
-  if (isDone && isProcessing) {
-    handleDone();
-  }
 
   return (
     <div className={darkMode ? "dark" : ""}>
@@ -213,16 +213,25 @@ export default function HomePage() {
 
               {/* Right panel — Results */}
               <div className="rounded-2xl border border-surface-border bg-surface-card p-6 min-h-[400px]">
-                {clipsResult ? (
+                {clipLoadError ? (
+                  <div className="flex flex-col items-center justify-center min-h-[280px] space-y-3 text-center px-2">
+                    <p className="text-sm font-medium text-red-400">Pipeline failed</p>
+                    <p className="text-xs text-white/50 max-w-lg whitespace-pre-wrap break-words">
+                      {clipLoadError}
+                    </p>
+                  </div>
+                ) : clipsResult ? (
                   clipsResult.total > 0 ? (
                     <ClipPaginator clips={clipsResult} jobId={jobId!} />
                   ) : (
                     <div className="flex flex-col items-center justify-center h-64 space-y-3 text-center">
                       <p className="text-sm text-white/40">
-                        Pipeline complete — no clips detected yet
+                        Pipeline complete — no clips in this run
                       </p>
-                      <p className="text-xs text-white/20">
-                        AI & Signal analysis coming in Phase 2
+                      <p className="text-xs text-white/20 max-w-md">
+                        Try lowering <span className="text-white/50">Score threshold</span> in Advanced
+                        Settings, switch detection mode to <span className="text-white/50">signal</span>, or use a
+                        different video. Check worker logs if this persists.
                       </p>
                     </div>
                   )

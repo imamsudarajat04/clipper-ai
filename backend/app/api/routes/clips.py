@@ -30,11 +30,18 @@ async def get_clips(job_id: str) -> ClipsResponse:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
 
     data = json.loads(raw)
+    status = data.get("status")
 
-    if data.get("status") != "done":
+    if status == "failed":
+        raise HTTPException(
+            status_code=422,
+            detail=data.get("message") or "Pipeline failed",
+        )
+
+    if status != "done":
         raise HTTPException(
             status_code=409,
-            detail=f"Job is not completed yet (status={data.get('status')})",
+            detail=f"Job is not completed yet (status={status})",
         )
 
     clips = data.get("clips", [])
@@ -42,7 +49,8 @@ async def get_clips(job_id: str) -> ClipsResponse:
     return ClipsResponse(
         job_id=job_id,
         total=len(clips),
-        detection_mode=data.get("settings", {}).get("mode", "hybrid"),
+        detection_mode=data.get("detection_mode")
+        or data.get("settings", {}).get("mode", "hybrid"),
         clips=clips,
         video_title=data.get("video_title"),
         video_duration=data.get("video_duration"),

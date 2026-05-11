@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # Storage
     OUTPUT_DIR: Path = Path("../data")
 
+    # yt-dlp — Netscape cookies.txt when YouTube returns "Sign in to confirm you're not a bot"
+    # Docker example: /data/youtube_cookies.txt (file on host under ./data/)
+    YTDLP_COOKIES_FILE: str = ""
+
     @property
     def VIDEOS_DIR(self) -> Path:
         return self.OUTPUT_DIR / "videos"
@@ -40,7 +44,17 @@ class Settings(BaseSettings):
 
     # AI (Phase 2)
     GROQ_API_KEY: str = ""
+    # llama-3.1-8b-instant = 6K TPM (easy to exceed with long transcripts). llama-3.3-70b-versatile = 12K TPM.
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     WHISPER_MODEL: str = "base"
+    # Hard cap on transcript chars sent to Groq (full prompt must stay under model TPM/RPM limits).
+    GROQ_TRANSCRIPT_MAX_CHARS: int = 3800
+
+    # Signal detection (Phase 2)
+    SIGNAL_WINDOW_MS: int = 1000
+    SIGNAL_RMS_PERCENTILE: float = 0.60  # windows above this energy quantile become candidates
+    SCENE_DIFF_THRESHOLD: float = 28.0  # mean abs diff on 160px gray (tuned for 0–255)
+    SCENE_MIN_INTERVAL_S: float = 1.5
 
     # Pipeline defaults
     MAX_VIDEO_DURATION_SECONDS: int = 3600  # 1 hour

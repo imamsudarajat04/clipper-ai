@@ -15,6 +15,8 @@ class ClipResult(BaseModel):
     clip_url: str | None = None
     thumbnail_url: str | None = None
     detection_source: str = "unknown"  # "ai", "signal", "hybrid"
+    clip_id: str | None = None
+    reason: str | None = None
 
 
 class ClipsResponse(BaseModel):

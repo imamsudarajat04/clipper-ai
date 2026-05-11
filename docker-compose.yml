@@ -5,7 +5,7 @@ services:
     container_name: clipper_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -13,6 +13,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - clipper_network
 
   # ── FastAPI server ───────────────────────────────────────────────────────────
   api:
@@ -33,9 +35,14 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # No --reload: bind-mount + WatchFiles can import half-written files → SyntaxError. Restart after code changes:
+    #   docker compose restart api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - clipper_network
 
   # ── Celery worker ────────────────────────────────────────────────────────────
+  # Downloads run here — set YTDLP_COOKIES_FILE in .env (e.g. /data/youtube_cookies.txt) + put cookies file in ./data/
   worker:
     build:
       context: ./backend
@@ -46,13 +53,18 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - OUTPUT_DIR=/data
+      # Must be present on recreate; changing .env alone needs: docker compose up -d worker
+      - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-}
     volumes:
       - ./backend:/app
+      # On Fedora/RHEL with SELinux, if cookies/videos get EACCES, try: ./data:/data:z
       - ./data:/data
     depends_on:
       redis:
         condition: service_healthy
     command: celery -A app.core.celery_app worker --loglevel=info -Q pipeline -c 2
+    networks:
+      - clipper_network
 
   # ── Flower (Celery monitor) — optional ───────────────────────────────────────
   flower:
@@ -72,6 +84,12 @@ services:
     command: celery -A app.core.celery_app flower --port=5555
     profiles:
       - monitoring
+    networks:
+      - clipper_network
+
+networks:
+  clipper_network:
+    driver: bridge
 
 volumes:
   redis_data:

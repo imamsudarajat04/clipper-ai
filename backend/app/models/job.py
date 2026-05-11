@@ -31,7 +31,7 @@ class ProcessSettings(BaseModel):
     mode: DetectionMode = DetectionMode.HYBRID
     min_clip_duration: int = 10        # seconds
     max_clips: int = 10
-    score_threshold: float = 0.5       # 0.0 – 1.0
+    score_threshold: float = 0.35      # 0.0 – 1.0 (default lenient so clips usually appear)
     auto_trim_silence: bool = True
     output_format: OutputFormat = OutputFormat.MP4
 

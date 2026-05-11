@@ -1,7 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useJobSSE } from "@/hooks/useJobSSE";
-import { JobStatus } from "@/lib/types";
 import { clsx } from "clsx";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -23,10 +23,20 @@ interface Props {
 
 export function JobProgress({ jobId, onDone }: Props) {
   const { status, percent, message, stage, isDone, error, isConnected } = useJobSSE(jobId);
+  const onDoneFired = useRef(false);
 
-  if (isDone && onDone) {
-    setTimeout(onDone, 600);
-  }
+  useEffect(() => {
+    onDoneFired.current = false;
+  }, [jobId]);
+
+  useEffect(() => {
+    if (!jobId || !isDone || !onDone || onDoneFired.current) return;
+    onDoneFired.current = true;
+    const t = window.setTimeout(() => {
+      onDone();
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [jobId, isDone, onDone]);
 
   if (!jobId) return null;
 

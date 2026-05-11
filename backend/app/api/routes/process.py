@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 import redis as redis_lib
 from fastapi import APIRouter, HTTPException
+from kombu.exceptions import OperationalError
 
 from app.core.config import settings
 from app.models.job import JobCreate, JobResponse, JobStatus, JobProgress
@@ -49,12 +50,18 @@ async def submit_process(payload: JobCreate) -> JobResponse:
     except redis_lib.RedisError as exc:
         raise HTTPException(status_code=503, detail=f"Redis unavailable: {exc}") from exc
 
-    # Enqueue Celery task
-    process_video.apply_async(
-        args=[job_id, payload.url, payload.settings.model_dump()],
-        task_id=job_id,
-        queue="pipeline",
-    )
+    # Enqueue Celery task (broker failures are not redis_lib.RedisError)
+    try:
+        process_video.apply_async(
+            args=[job_id, payload.url, payload.settings.model_dump()],
+            task_id=job_id,
+            queue="pipeline",
+        )
+    except OperationalError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Task queue unavailable — check Redis and the Celery worker. {exc}",
+        ) from exc
 
     return JobResponse(
         job_id=job_id,

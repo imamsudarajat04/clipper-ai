@@ -1,227 +1,210 @@
 # Clipper AI 🎬✂️
 
-**Auto highlight detection dari video YouTube** menggunakan AI (Whisper + Groq LLM) dan signal analysis (PyDub + OpenCV).
+**Deteksi highlight otomatis dari video YouTube** — download, transkripsi lokal (Whisper), analisis AI (Groq), sinyal audio/scene (PyDub + OpenCV), **hybrid scoring**, lalu **export clip MP4** lewat Celery + SSE progress di UI.
 
 ---
 
-## ✨ Fitur
+## Fitur
 
-| Fase | Fitur |
-|------|-------|
-| **Phase 1** ✅ | Download video, ekstrak audio, job queue real-time |
-| **Phase 2** 🔜 | Transkripsi Whisper, analisis Groq LLM, signal detection |
-| **Phase 3** 🔜 | Export clips, merged reel, share link |
+| Fase | Status | Isi |
+|------|--------|-----|
+| **Phase 1** | Selesai | Download yt-dlp, ekstrak audio (ffmpeg), job queue (Celery + Redis), status & SSE |
+| **Phase 2** | Selesai | Whisper, Groq (JSON highlight), signal detection, hybrid engine, export clip per window |
+| **Phase 3** | Rencana | Reel gabungan, thumbnail batch, history persisten / share link matang |
 
 ---
 
-## 🧱 Tech Stack
+## Tech stack
 
-| Layer | Tech |
-|-------|------|
-| Frontend | Next.js 14, Tailwind CSS, TypeScript |
+| Layer | Teknologi |
+|-------|-----------|
+| Frontend | Next.js 14, Tailwind, TypeScript |
 | Backend | FastAPI (Python 3.11+) |
 | Queue | Celery + Redis |
 | Download | yt-dlp |
-| Audio | ffmpeg |
-| AI | Whisper (local) + Groq API (LLaMA 3) |
-| Signal | PyDub + OpenCV |
+| Media | ffmpeg |
+| AI | openai-whisper (lokal) + Groq Chat Completions |
+| Sinyal | PyDub + OpenCV |
 
 ---
 
-## 📋 Prerequisites
+## Prerequisites
 
-Pastikan semua tool berikut sudah terinstall:
-
-- **Python** ≥ 3.11 → [python.org](https://python.org)
-- **Node.js** ≥ 18 → [nodejs.org](https://nodejs.org)
-- **Docker & Docker Compose** → [docker.com](https://docker.com)
-- **ffmpeg** (untuk setup manual)
+- **Python** ≥ 3.11 — [python.org](https://python.org)
+- **Node.js** ≥ 18 — [nodejs.org](https://nodejs.org)
+- **Docker & Docker Compose** — [docker.com](https://docker.com)
+- **ffmpeg** (wajib untuk setup manual lokal)
   ```bash
   # macOS
   brew install ffmpeg
-  
+
   # Ubuntu/Debian
   sudo apt install ffmpeg
-  
-  # Windows (via Chocolatey)
-  choco install ffmpeg
   ```
 - **Git**
 
+Untuk mode **AI** atau **Hybrid**, siapkan **Groq API key** ([console.groq.com](https://console.groq.com)).
+
 ---
 
-## 🚀 Quick Start (Docker — Direkomendasikan)
-
-Cara paling mudah: satu command langsung semua jalan.
+## Quick start (Docker — disarankan)
 
 ```bash
-# 1. Clone repo
 git clone <repo-url>
 cd clipper-ai
 
-# 2. Setup environment
 cp .env.example .env
-# Edit .env jika perlu (GROQ_API_KEY untuk Phase 2)
+# Isi GROQ_API_KEY. Opsional: GROQ_MODEL, GROQ_TRANSCRIPT_MAX_CHARS, YTDLP_COOKIES_FILE (lihat bawah).
 
-# 3. Jalankan semua service
-docker compose up --build
+docker compose up --build -d
+```
 
-# 4. Jalankan frontend (terminal baru)
+Frontend (terminal terpisah):
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Buka browser di **http://localhost:3000** 🎉
+Buka **http://localhost:3000**. API: **http://localhost:8000** — dokumentasi interaktif: **http://localhost:8000/docs**.
 
-| Service | URL |
-|---------|-----|
+| Service | URL / catatan |
+|---------|----------------|
 | Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| API Docs (Swagger) | http://localhost:8000/docs |
-| Flower (monitoring) | http://localhost:5555 *(profile: monitoring)* |
+| Backend | http://localhost:8000 |
+| Flower (monitor Celery) | http://localhost:5555 — jalankan dengan `docker compose --profile monitoring up -d` |
+
+**Setelah mengubah `.env`** (misalnya cookies atau model Groq), recreate container agar variabel terbaca:
+
+```bash
+docker compose up -d --force-recreate api worker
+```
+
+Image API memakai `uvicorn` **tanpa** `--reload` (hindari race dengan bind-mount). Setelah edit kode backend: `docker compose restart api`.
+
+Redis di Compose dipetakan ke host **port 6380** → `6380:6379`. Service di dalam jaringan Docker memakai hostname `redis` dan port **6379**.
 
 ---
 
-## 🛠 Manual Setup (Tanpa Docker)
+## Setup manual (tanpa Docker)
 
-### 1. Redis
+### Redis
 
 ```bash
-# macOS
-brew install redis
-brew services start redis
-
-# Ubuntu
-sudo apt install redis-server
-sudo systemctl start redis
-
-# Windows — gunakan WSL atau Docker:
-docker run -d -p 6379:6379 redis:7-alpine
+# macOS: brew install redis && brew services start redis
+# Ubuntu: sudo apt install redis-server && sudo systemctl start redis
+# Atau: docker run -d -p 6379:6379 redis:7-alpine
 ```
 
-### 2. Backend
+Di `.env` untuk lokal: `REDIS_URL=redis://localhost:6379/0`, `OUTPUT_DIR=../data` (relatif dari folder `backend/` saat menjalankan uvicorn).
+
+### Backend
 
 ```bash
 cd backend
-
-# Buat virtual environment
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-
-# Install dependencies
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-# Setup environment
 cp ../.env.example ../.env
-# Edit .env, set OUTPUT_DIR=../data dan REDIS_URL=redis://localhost:6379/0
-
-# Jalankan API server
 uvicorn app.main:app --reload --port 8000
+```
 
-# Terminal baru — jalankan Celery worker
-source .venv/bin/activate
+Terminal lain — worker:
+
+```bash
+cd backend && source .venv/bin/activate
 celery -A app.core.celery_app worker --loglevel=info -Q pipeline -c 2
 ```
 
-### 3. Frontend
+### Frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Jalankan dev server
+# Opsional: echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > .env.local
 npm run dev
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## Environment variables
 
-Semua variabel ada di `.env.example`. Salin ke `.env` lalu sesuaikan:
+Ringkasan (lengkap ada di `.env.example`):
 
-| Variable | Default | Keterangan |
-|----------|---------|-----------|
-| `DEBUG` | `false` | Mode debug FastAPI |
-| `REDIS_URL` | `redis://localhost:6379/0` | URL koneksi Redis |
-| `OUTPUT_DIR` | `../data` | Direktori output video/audio/clips |
-| `GROQ_API_KEY` | *(kosong)* | API key Groq — [dapatkan di sini](https://console.groq.com) |
-| `WHISPER_MODEL` | `base` | Model Whisper: `tiny`/`base`/`small`/`medium` |
-| `MAX_VIDEO_DURATION_SECONDS` | `3600` | Batas durasi video (detik) |
-| `DEFAULT_MIN_CLIP_DURATION` | `10` | Durasi minimum clip (detik) |
-| `DEFAULT_MAX_CLIPS` | `10` | Jumlah maksimum clip |
-| `DEFAULT_SCORE_THRESHOLD` | `0.5` | Minimum confidence score |
+| Variable | Keterangan |
+|----------|------------|
+| `DEBUG` | Mode debug FastAPI |
+| `ALLOWED_ORIGINS` | CORS (JSON array string di `.env`) |
+| `REDIS_URL` | Redis untuk Celery |
+| `OUTPUT_DIR` | Video, audio, clip (`/data` di Docker) |
+| `YTDLP_COOKIES_FILE` | Path **Netscape cookies.txt** jika YouTube meminta login / anti-bot ([wiki yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies)). Di Docker sering: `/data/youtube_cookies.txt` dengan file di `./data/` host |
+| `GROQ_API_KEY` | Wajib untuk mode AI / hybrid |
+| `GROQ_MODEL` | Default disarankan: `llama-3.3-70b-versatile` (TPM lebih longgar). `llama-3.1-8b-instant` punya TPM ~6K — mudah kena limit |
+| `GROQ_TRANSCRIPT_MAX_CHARS` | Batas panjang transcript bertimestamp ke Groq (hindari error TPM) |
+| `WHISPER_MODEL` | `tiny` / `base` / `small` / … |
+| `MAX_VIDEO_DURATION_SECONDS` | Batas durasi proses (detik) |
+| `DEFAULT_*` | Min durasi clip, max clips, threshold score pipeline |
 
 ---
 
-## 📖 Cara Pakai
+## Cara pakai
 
-### Via UI (http://localhost:3000)
+### UI (http://localhost:3000)
 
-1. **Paste URL YouTube** di input box kiri
-2. **Pilih mode deteksi:**
-   - 🤖 **AI** — transkripsi Whisper → analisis Groq LLM
-   - 📊 **Signal** — deteksi audio peak + scene change
-   - ⚡ **Hybrid** — kombinasi AI + Signal (default)
-3. *(Opsional)* Buka **Advanced Settings** untuk atur durasi, jumlah clip, threshold
-4. Klik **Detect Highlights** → lihat progress real-time di panel bawah
-5. Setelah selesai, hasil clips muncul di panel kanan (3 per halaman)
-6. **Export:** download JSON, timestamps .txt, atau copy share link
+1. Tempel URL YouTube.
+2. Pilih mode: **AI** (Whisper + Groq), **Signal** (audio + scene), **Hybrid** (gabungan).
+3. Opsional: **Advanced** — durasi, jumlah clip, threshold.
+4. **Detect Highlights** — progress lewat SSE.
+5. Setelah **selesai**, daftar clip (paginasi) dan panel export (JSON / timestamps sesuai implementasi UI).
 
-### Via API (curl)
+### API
 
 ```bash
-# Submit video
 curl -X POST http://localhost:8000/api/process \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     "settings": {
       "mode": "hybrid",
       "min_clip_duration": 10,
       "max_clips": 5,
-      "score_threshold": 0.6,
-      "auto_trim_silence": true,
-      "output_format": "mp4"
+      "score_threshold": 0.6
     }
   }'
-# Response: { "job_id": "abc-123", "status": "pending", ... }
 
-# Poll status
-curl http://localhost:8000/api/job/abc-123
-
-# Stream progress (SSE)
-curl -N http://localhost:8000/api/job/abc-123/stream
-
-# Get clips (setelah status = done)
-curl http://localhost:8000/api/clips/abc-123
+curl -N http://localhost:8000/api/job/<job_id>/stream
+curl http://localhost:8000/api/clips/<job_id>
 ```
+
+- **409** pada `/api/clips/...` — job belum `done` (masih diproses).
+- **422** — job `failed` (lihat pesan / log worker).
 
 ---
 
-## 🏗 Struktur Folder
+## Struktur repo
 
 ```
 clipper-ai/
-├── frontend/                   # Next.js 14
+├── frontend/
 │   └── src/
-│       ├── app/                # App Router pages
-│       ├── components/         # UI components
-│       ├── hooks/              # useJobSSE
-│       └── lib/                # API client + types
-├── backend/                    # FastAPI
-│   └── app/
-│       ├── api/routes/         # process, jobs, clips
-│       ├── core/               # config, celery
-│       ├── models/             # Pydantic models
-│       ├── pipeline/           # downloader, audio, (Phase 2: whisper, groq, signal)
-│       └── tasks/              # Celery task
-├── data/                       # Output files (gitignored)
-│   ├── videos/
-│   ├── audio/
-│   └── clips/
+│       ├── app/
+│       ├── components/
+│       └── lib/                 # api client, types
+├── backend/app/
+│   ├── api/routes/              # process, job, clips
+│   ├── core/                    # config, celery
+│   ├── models/
+│   ├── pipeline/
+│   │   ├── downloader.py
+│   │   ├── detect_types.py
+│   │   ├── transcribe_whisper.py
+│   │   ├── groq_highlights.py
+│   │   ├── signal_detect.py
+│   │   ├── hybrid_engine.py
+│   │   └── clip_export.py
+│   └── tasks/pipeline_task.py
+├── data/                        # output (gitignored)
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -229,41 +212,27 @@ clipper-ai/
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
-### `yt-dlp` error: `Video unavailable`
-- Video mungkin di-private atau geo-blocked
-- Coba update yt-dlp: `pip install -U yt-dlp`
-
-### `ffmpeg: command not found`
-- Install ffmpeg (lihat Prerequisites di atas)
-- Jika pakai Docker, ffmpeg sudah termasuk di image
-
-### `Redis connection refused`
-- Pastikan Redis running: `redis-cli ping` → harus balas `PONG`
-- Cek `REDIS_URL` di `.env`
-
-### `Job stuck di PENDING`
-- Celery worker belum berjalan
-- Cek apakah worker bisa konek ke Redis: lihat log worker
-
-### Worker tidak terima task
-- Pastikan queue-nya sama: worker pakai `-Q pipeline`, task dikirim ke queue `pipeline`
-
-### Frontend tidak bisa konek ke backend
-- Cek `NEXT_PUBLIC_API_URL` di `frontend/.env.local`
-- Pastikan backend running di port 8000
+| Masalah | Tindakan |
+|---------|----------|
+| YouTube: *Sign in to confirm you're not a bot* | Set `YTDLP_COOKIES_FILE` ke cookies Netscape yang valid, file bisa dibaca di container, lalu `docker compose up -d --force-recreate worker` |
+| Groq **413** / *tokens per minute* / TPM | Kurangi `GROQ_TRANSCRIPT_MAX_CHARS` atau pakai model TPM lebih tinggi (`GROQ_MODEL`); tier Dev di Groq bila perlu |
+| `Redis connection refused` | Pastikan Redis jalan; di Docker cek service `redis` dan `REDIS_URL` |
+| Job stuck **PENDING** | Pastikan worker Celery jalan dengan queue `-Q pipeline` |
+| Frontend tidak konek API | Set `NEXT_PUBLIC_API_URL` di `frontend/.env.local` ke URL API |
+| `ffmpeg: command not found` | Install ffmpeg di host (di image Docker sudah ada) |
 
 ---
 
-## 🗺 Roadmap
+## Roadmap
 
-- [x] **Phase 1** — Project setup, yt-dlp download, ffmpeg audio extract, job queue
-- [ ] **Phase 2** — Whisper transcription, Groq LLM analysis, PyDub + OpenCV signal detection
-- [ ] **Phase 3** — ffmpeg clip cutting, merged reel export, thumbnail generation, history page
+- [x] Phase 1 — Setup, download, audio extract, job queue + SSE
+- [x] Phase 2 — Whisper, Groq, signal, hybrid, clip export
+- [ ] Phase 3 — Reel merged, thumbnails, history / share link
 
 ---
 
-## 📄 License
+## License
 
 MIT
